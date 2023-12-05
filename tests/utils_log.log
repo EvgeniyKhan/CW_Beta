@@ -1,0 +1,4 @@
+2023-12-05 13:21:22,351 views.py ERROR: Произошла ошибка: API error
+2023-12-05 13:21:22,356 views.py INFO: Из файла user_settings.json получен список валют
+2023-12-05 13:21:22,362 views.py ERROR: Произошла ошибка: API Error
+2023-12-05 13:21:22,370 views.py INFO: Из файла user_settings.json получен список акций
