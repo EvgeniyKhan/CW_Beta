@@ -11,6 +11,10 @@ logging = log_utils()
 
 
 def get_greeting():
+    """
+    Вывод времени
+    :return: string
+    """
     current_time = datetime.now().hour
     log_utils().info("Дата запускается get_getting")
     if 0 <= current_time < 4:

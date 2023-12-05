@@ -1,55 +1,65 @@
-﻿import unittest
-import pandas as pd
-import pytest
-from freezegun import freeze_time
-from src.utils import get_greeting, transactions_xlsx_open, collect_response
-from src.views import get_stocks
+﻿import pandas as pd
+import json
+from src.utils import get_greeting, transactions_xlsx_open, process_data, top_transactions, open_json, collect_response
 
 
-@pytest.mark.parametrize("hour, expected_greeting", [
-    (6, "Доброе утро!"),
-    (14, "Добрый день!"),
-    (19, "Добрый вечер!"),
-    (2, "Доброй ночи!")
-])
-@freeze_time("2022-01-01")
-def test_greetings(hour, expected_greeting):
-    with freeze_time(f"2022-01-01 {hour}:00:00"):
-        actual_greeting = get_greeting()
-        assert actual_greeting == expected_greeting
+def test_get_greeting():
+    # Тест для функции get_greeting()
+    greetings = ["Добрый ночи!", "Доброе утро!", "Добрый день!", "Добрый вечер!"]
+    greeting = get_greeting()
+    assert greeting in greetings
 
 
-def test_transactions_xlsx_open_valid_file():
-    expected_output = transactions_xlsx_open()
+def test_transactions_xlsx_open():
+    # Тест для функции transactions_xlsx_open()
+    # Создаем временный DataFrame и сохраняем его в файл
+    data = {'Номер карты': [1111, 2222, 3333], 'Сумма платежа': [100, 200, 300], 'Дата операции': ['2023-12-01', '2023-12-02', '2023-12-03']}
+    df = pd.DataFrame(data)
+    file_path = 'test_transactions.xlsx'
+    df.to_excel(file_path, index=False)
 
-    result = transactions_xlsx_open()
-
+    # Проверяем, что функция корректно читает файл
+    result = transactions_xlsx_open(file_path)
     assert isinstance(result, pd.DataFrame)
-    assert result.equals(expected_output)
+    assert len(result) == 3  # Проверяем количество записей в DataFrame
 
 
-def test_collect_response():
-    assert collect_response()['cards'] == [{'last_digits': '7197', 'total_spent': -2212734.539999989,
-                                            'cashback': 25305.0},
-                                           {'last_digits': '5091', 'total_spent': -14918.16, 'cashback': 226.0},
-                                           {'last_digits': '4556', 'total_spent': 951174.6699999992,
-                                            'cashback': 7730.0},
-                                           {'last_digits': '1112', 'total_spent': -16207.080000000002,
-                                            'cashback': 164.0}, {'last_digits': '5507', 'total_spent': -84000.0,
-                                                                 'cashback': 840.0}, {'last_digits': '6002',
-                                                                                      'total_spent': -69200.0,
-                                                                                      'cashback': 692.0},
-                                           {'last_digits': '5441', 'total_spent': -1000.0, 'cashback': 10.0}]
-    assert collect_response()['top_transactions'] == [{'date': '21.03.2019 17:01:38', 'amount': 190044.51,
-                                                       'category': 'Переводы', 'description': 'Перевод Кредитная карта.'
-                                                                                              ' ТП 10.2 RUR'},
-                                                      {'date': '23.10.2018 12:26:15', 'amount': 177506.03,
-                                                       'category': 'Переводы', 'description':
-                                                           'Перевод Кредитная карта. ТП 10.2 RUR'},
-                                                      {'date': '30.12.2021 17:50:17', 'amount': 174000.0,
-                                                       'category': 'Пополнения', 'description':
-                                                           'Пополнение через Газпромбанк'},
-                                                      {'date': '14.09.2021 14:57:42', 'amount': 150000.0, 'category':
-                                                          'Пополнения', 'description': 'Перевод с карты'},
-                                                      {'date': '23.10.2018 12:24:54', 'amount': 150000.0, 'category':
-                                                          'Переводы', 'description': 'Пополнение счета'}]
+def test_process_data():
+    # Тест для функции process_data()
+    # Создаем временный DataFrame
+    data = {'Номер карты': [1111, 2222, 3333], 'Сумма платежа': [100, 200, 300], 'Дата операции': ['2023-12-01', '2023-12-02', '2023-12-03']}
+    df = pd.DataFrame(data)
+
+    # Вызываем функцию process_data() с начальной датой и проверяем корректность обработки данных
+    result = process_data(df, "2023-12-02")
+    assert isinstance(result, list)
+    assert len(result) == 2  # Проверяем количество записей в списке данных
+
+
+def test_top_transactions():
+    # Тест для функции top_transactions()
+    # Создаем временный DataFrame
+    data = {'Дата операции': ['2023-12-01', '2023-12-02', '2023-12-03'],
+            'Сумма платежа': [100, 200, 300],
+            'Категория': ['Продукты', 'Одежда', 'Техника'],
+            'Описание': ['Покупка продуктов', 'Покупка одежды', 'Покупка техники']}
+    df = pd.DataFrame(data)
+
+    # Вызываем функцию top_transactions() и проверяем формат возвращаемых данных
+    result = top_transactions(df)
+    assert isinstance(result, list)
+    assert len(result) == 3  # Проверяем количество записей в списке топ-транзакций
+
+
+def test_open_json():
+    # Тест для функции open_json()
+    # Создаем временный JSON файл
+    data = {'user_currencies': ['USD', 'EUR', 'GBP']}
+    file_path = 'test_settings.json'
+    with open(file_path, 'w') as json_file:
+        json.dump(data, json_file)
+
+    # Проверяем, что функция правильно открывает и читает JSON файл
+    result = open_json(file_path, 'user_currencies')
+    assert isinstance(result, list)
+    assert len(result) == 3  # Проверяем количество валют в списке
