@@ -1,22 +1,27 @@
-import pandas as pd
 import json
+import logging
+from typing import Any
 
-from config import OPEN_XLS
-from src.log import log_utils
+from src.utils import reading_data_from_file
 
-logging = log_utils()
-
-
-def search_transactions(filename, querys):
-    df = pd.read_excel(filename)
-    filtered_df = df[df["Описание"].str.contains(querys, case=False,na=False)]
-    result = filtered_df.to_dict(orient="records")
-    logging.info("Преобразование фильтрованного DataFrame в список словарей")
-    return json.dumps(result, indent=4, ensure_ascii=False)
+logger = logging.getLogger('__func_services__')
+file_handler_masks = logging.FileHandler('services_loger.log', 'w', encoding='utf-8')
+file_formatter_masks = logging.Formatter('%(asctime)s %(module)s %(levelname)s %(message)s')
+file_handler_masks.setFormatter(file_formatter_masks)
+logger.addHandler(file_handler_masks)
+logger.setLevel(logging.INFO)
 
 
-# Пример использования функции
-file_path = OPEN_XLS  # Путь к файлу Excel
-query = "Аптеки"  # Строка запроса
-result = search_transactions(file_path, query)
-print(result)
+def simple_search(request: str) -> Any:
+    """ Пользователь передает строку для поиска, возвращается json-ответ со всеми транзакциями,
+    содержащими запрос в описании или категории """
+    try:
+        list_transactions = reading_data_from_file('operations.xls')
+        search_results = list_transactions.loc[(list_transactions["Категория"].str.contains(request, case=False))
+                                               | (list_transactions["Описание"].str.contains(request, case=False))]
+        search_results_json = search_results.to_json(orient="records", force_ascii=False)
+        logger.info('Успешно. simple_search()')
+        return json.loads(search_results_json)
+    except Exception as e:
+        logger.error(f'Произошла ошибка: {str(e)} в функции simple_search()')
+        return []

@@ -1,107 +1,116 @@
+import datetime
 import json
-import math
-from datetime import datetime
-from config import OPEN_XLS, OPEN_JSON
+import logging
+import os
+from typing import Any
+
 import pandas as pd
+import requests
+import yfinance as yf
+from dotenv import load_dotenv
 
-from src.log import log_utils
-from src.views import get_stocks, get_currencies
+load_dotenv()
 
-logging = log_utils()
-
-
-def get_greeting():
-    """
-    Вывод времени
-    :return: string
-    """
-    current_time = datetime.now().hour
-    log_utils().info("Дата запускается get_getting")
-    if 0 <= current_time < 4:
-        return "Добрый ночи!"
-    elif 4 > current_time <= 12:
-        return "Доброе утро!"
-    elif 12 > current_time <= 17:
-        return "Добрый день!"
-    else:
-        return "Добрый вечер!"
+logger = logging.getLogger('__func_utils__')
+file_handler_masks = logging.FileHandler('utils_loger.log', 'w', encoding='utf-8')
+file_formatter_masks = logging.Formatter('%(asctime)s %(module)s %(levelname)s %(message)s')
+file_handler_masks.setFormatter(file_formatter_masks)
+logger.addHandler(file_handler_masks)
+logger.setLevel(logging.INFO)
 
 
-def transactions_xlsx_open():
-    """
-    Функция считывает файлы excel
-    :param: path
-    :return: dict
-    """
+def data_currency_and_share_request(filename: str) -> Any:
+    """ получает информацию по валютам и акциям и выводит в виде tuple"""
+    current_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    file_path = os.path.join(current_directory, filename)
     try:
-        return pd.read_excel(OPEN_XLS)
-    except ValueError:
-        logging.error("Ошибка чтения operations.xls")
-        return "Ошибка чтения файла excel"
+        with open(file_path, 'r', encoding='utf-8') as f:
+            text = json.load(f)
+            logger.info('Успешно. data_currency_and_share_request()')
+    except FileNotFoundError:
+        logger.error('Файл не найден. data_currency_and_share_request()')
+        return [], []
+    api_key_currency = os.getenv('api_key_openexchangerates')
+    exchange_rates = []
+    share_prices = []
+    try:
+        for currency in text['user_currencies']:
+            url_currency = (f"https://openexchangerates.org/api/latest.json?app_id={api_key_currency}&symbols="
+                            f"{currency},RUB")
+            data_currency = requests.get(url_currency).json()
+            rates_currency = data_currency["rates"]
+            exchange_rate = 1 / rates_currency[currency] * rates_currency['RUB']
+            exchange_rates.append({"Валюта": currency, "Цена": round(exchange_rate, 2)})
+        for stocks in text['user_stocks']:
+            symbol = yf.Ticker(stocks)
+            stock_info = symbol.info
+            if "currentPrice" in stock_info:
+                current_price = stock_info["currentPrice"]
+                share_prices.append({
+                    "Акция": stocks,
+                    "Цена": current_price
+                })
+        logger.info('Успешно. data_currency_and_share_request()')
+        return exchange_rates, share_prices
+    except Exception as error:
+        logger.error(f"Произошла ошибка: {error}")
+        return [], []
 
 
-def process_data(start):
-    start_date = pd.to_datetime(start)
-    df = transactions_xlsx_open()
-    data = []
-    # Исключаем пустые строки в данных о картах
-    df = df.dropna(subset=['Номер карты'])
-    # Фильтруем данные с начала месяца до введенной даты
-    df['Дата операции'] = pd.to_datetime(df['Дата операции'], format='%d.%m.%Y %H:%M:%S')
-    df = df[df['Дата операции'] >= start_date]
-    for card_num in df['Номер карты'].unique():
-        # Инициализируйте переменные для подсчета суммы платежей и кэшбэка для текущей карты:
-        total_spent = 0
-        cashback = 0
-        # Фильтруйте данные по номеру карты:
-        card_data = df[df['Номер карты'] == card_num]
-        # Пройдитесь по каждой операции и обновите значения суммы платежей и кэшбэка:
-        for index, row in card_data.iterrows():
-            total_spent += row['Сумма платежа']
-            if total_spent < 0:
-                cashback += math.fabs(row['Сумма платежа'] // 100)  # Расчет кэшбэка
-            cashback += row.get("Кэшбэк") if not math.isnan(row.get("Кэшбэк")) else 0
-        # Добавьте информацию о текущей карте в список карт:
-        data.append({
-            "last_digits": card_num[-4:],  # Последние 4 цифры номера карты
-            "total_spent": total_spent,
-            "cashback": cashback
-        })
-    logging.info("Функция process_data() отработала")
-    return data
+def greetings() -> str:
+    """ Приветствие берущее за основу текущее время """
+    opts = {"hey": ('Доброе утро!', 'Добрый день!', 'Добрый вечер!', 'Доброй ночи!')}
+    now = datetime.datetime.now()
+    if now.hour > 4 and now.hour <= 12:
+        greet = opts["hey"][0]
+    elif now.hour > 12 and now.hour <= 16:
+        greet = opts["hey"][1]
+    elif now.hour > 16 and now.hour <= 24:
+        greet = opts["hey"][2]
+    elif now.hour >= 0 and now.hour <= 4:
+        greet = opts["hey"][3]
+    logger.info("Успешно. greetings()")
+    return greet
 
 
-def top_transactions(transactions):
-    transactions = transactions.sort_values(by='Дата операции').nlargest(5, 'Сумма платежа')
-    top = []
-    for index, row in transactions.iterrows():
-        top.append({
-            "date": row['Дата операции'],  # Форматирование даты в требуемом формате
-            "amount": float(row['Сумма платежа']),
-            "category": row['Категория'],
-            "description": row['Описание']
-        })
-    logging.info("Функция top_transactions() отработала")
-    return top
+def reading_data_from_file(filename: str) -> pd.DataFrame:
+    """ Чтение данных из файла .xls """
+    try:
+        current_directory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        file_path = os.path.join(current_directory, 'data', filename)
+        logger.info('Успешно reading_data_from_file()')
+        return pd.read_excel(file_path, na_values=["NA", "N/A", "missing"])
+    except FileNotFoundError:
+        logger.error("Файл не найден.")
+        raise FileNotFoundError("Файл не найден.")
 
 
-def open_json(path, key):
-    """
-    Открывает json файл
-    :param path: путь к файлу
-    :param key: ключ словаря в json
-    :return: список валют
-    """
-    with open(path, 'r') as fcc_file:
-        logging.info("Файл json прочитан")
-        return json.load(fcc_file)[key]
+def outputting_statistics_based_on_data(user_date: str) -> pd.DataFrame:
+    """ на вход дается дата начала и конца. функция выводит данные из файла DataFrame в этом диапазоне"""
+    try:
+        data_for_filter_by_date = reading_data_from_file('operations.xls')
+        data_for_filter_by_date['Дата операции'] = pd.to_datetime(data_for_filter_by_date['Дата операции'],
+                                                                  format='%d.%m.%Y %H:%M:%S')
+        date_obj = datetime.datetime.strptime(user_date, '%Y-%m-%d')
+        end_date = pd.to_datetime(user_date)
+        start_mounth = date_obj.replace(day=1)
+        data_in_interval = data_for_filter_by_date[(data_for_filter_by_date['Дата операции'] >= start_mounth)
+                                                   & (data_for_filter_by_date['Дата операции'] <= end_date
+                                                      + pd.DateOffset(days=1))]
+        logger.info('Успешно. outputting_statistics_based_on_data()')
+        return data_in_interval[data_in_interval['Валюта платежа'] == "RUB"]
+    except Exception as e:
+        logger.error("Произошла ошибка: ", str(e))
+        return pd.DataFrame()
 
 
-def collect_response():
-    return {
-        "greeting": get_greeting(),
-        "cards": process_data("2018-05-21 00:00:00"),
-        "top_transactions": top_transactions(transactions_xlsx_open()),
-        "currency_rates": get_currencies(open_json(OPEN_JSON, 'user_currencies')),
-        "stock_prices": get_stocks(open_json(OPEN_JSON, 'user_stocks'))
-    }
+def writing_data_to_json(operations: pd.DataFrame) -> Any:
+    """ преобразование DataFrames в JSON список """
+    try:
+        json_string = operations.to_json(orient='records', force_ascii=False)
+        json_data = json.loads(json_string)
+        logger.info("Успешно. writing_data_to_json()")
+        return json_data
+    except Exception as e:
+        logger.error(f"Произошла ошибка при преобразовании DataFrame в JSON: {e}")
+        return []
